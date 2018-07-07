@@ -20,7 +20,8 @@ os.makedirs(evaluate_dir, exist_ok=True)
 def training(x_train, x_test=None,
              eval_iters=50, ckpt_iters=100, max_iters=-1,
              tc_prior=0.3, td_prior=0.6,
-             pretrained_model_path=PJ(ckpt_dir, 'glcic.h5')):
+             pretrained_generator=PJ(ckpt_dir, 'generator.h5'),
+             pretrained_discriminator=PJ(ckpt_dir, 'discriminator.h5')):
     input_tensor = Input(shape=(256, 256, 3), name='raw_image')
     mask_tensor = Input(shape=(256, 256, 1), name='mask')
     bbox_tensor = Input(shape=(4,), dtype='int32', name='bounding_box')
@@ -33,9 +34,9 @@ def training(x_train, x_test=None,
     glcic = GLCICBuilder(activation='relu',
                          loss=[generator_loss, discriminator_loss])
     glcic_net = glcic.create(input_tensor, mask_tensor,
-                             bbox_tensor, color_prior=color_prior)
-    if pretrained_model_path is not None and os.path.isfile(pretrained_model_path):
-        glcic_net.load_weights(pretrained_model_path)
+                             bbox_tensor, color_prior=color_prior,
+                             pretrained_generator=pretrained_generator,
+                             pretrained_discriminator=pretrained_discriminator)
 
     glcic_net = glcic.compile(glcic_net, loss_weights=[1.0, alpha])
     completion_net = glcic.glcic_completion
@@ -85,7 +86,8 @@ def training(x_train, x_test=None,
                 eval_images = completion_net.predict(x_test)
                 ski_io.imsave(PJ(evaluate_dir, f'eval_{i:05}.jpg'), eval_images[0, ...], quality=100)
             if i % ckpt_iters == 0:
-                glcic_net.save(PJ(ckpt_dir, 'glcic.h5'))
+                completion_net.save(PJ(ckpt_dir, 'generator.h5'))
+                discriminator_net.save(PJ(ckpt_dir, 'discriminator.h5'))
             if max_iters > 0 and i > max_iters:
                 break
 

@@ -421,22 +421,27 @@ class GLCICBuilder(GraphBuilder):
 
     __tag__ = 'glcic'
 
-    def create(self, input_tensor, mask_tensor, bbox_tensor, color_prior=None):
+    def create(self, input_tensor, mask_tensor, bbox_tensor,
+               pretrained_generator=None, pretrained_discriminator=None,
+               color_prior=None):
 
         completion_builder = CompletionBuilder(color_prior, activation=self.activation,
                                                loss='mse', metrics=['mae'])
-        completion_net = completion_builder(input_tensor, mask_tensor, do_compile=True)
+        completion_net = completion_builder.create(input_tensor, mask_tensor)
+        if pretrained_generator is not None and os.path.isfile(pretrained_generator):
+            completion_net.load_weights(pretrained_generator)
+        completion_net = completion_builder.compile(completion_net)
+
         completion_output_tensor = completion_net([input_tensor, mask_tensor])
 
         global_input_tensor = Input(shape=K.int_shape(completion_output_tensor)[1:], name='completed_image')
 
         discriminator_builder = DiscriminatorBuilder(activation=self.activation,
                                                      loss='binary_crossentropy', metrics=['acc'])
-        discriminator_net = discriminator_builder(
-            global_input_tensor,
-            bbox_tensor,
-            do_compile=True
-        )
+        discriminator_net = discriminator_builder.create(global_input_tensor, bbox_tensor)
+        if pretrained_discriminator is not None and os.path.isfile(pretrained_discriminator):
+            discriminator_net.load_weights(pretrained_discriminator)
+        discriminator_net = discriminator_builder.compile(discriminator_net)
 
         discriminator_net.trainable = False
         discriminator_output_tensor = discriminator_net(
