@@ -369,7 +369,8 @@ class DiscriminatorBuilder(_DisBuilder):
     def cropping(self, image, bbox):
         return tf.image.crop_to_bounding_box(image, bbox[1], bbox[0], bbox[3], bbox[2])
 
-    def create(self, global_input_tensor, bbox_tensor, local_shape=(128, 128, 3)):
+    def create(self, global_input_tensor, bbox_tensor, local_shape=(128, 128, 3),
+               pretrained_local=None, pretrained_global=None):
 
         dis_builder = _DisBuilder(activation=self.activation, loss='binary_crossentropy', metrics=['acc'])
 
@@ -381,6 +382,8 @@ class DiscriminatorBuilder(_DisBuilder):
             out_n_filter=1024,
             tag='glcic_global_discriminator'
         )
+        if pretrained_global is not None and os.path.isfile(pretrained_global):
+            global_net.load_weights(pretrained_global)
         cropping_layer = Lambda(
             lambda x: K.map_fn(
                 lambda z: self.cropping(z[0], z[1]),
@@ -402,6 +405,9 @@ class DiscriminatorBuilder(_DisBuilder):
             tag='glcic_local_discriminator'
         )
 
+        if pretrained_local is not None and os.path.isfile(pretrained_local):
+            local_net.load_weights(pretrained_local)
+
         global_output_tensor = global_net(global_input_tensor)
         local_output_tensor = local_net(cropped_tensor)
 
@@ -422,8 +428,8 @@ class GLCICBuilder(GraphBuilder):
     __tag__ = 'glcic'
 
     def create(self, input_tensor, mask_tensor, bbox_tensor,
-               pretrained_generator=None, pretrained_discriminator=None,
-               color_prior=None):
+               pretrained_local=None, pretrained_global=None,
+               pretrained_generator=None, color_prior=None):
 
         completion_builder = CompletionBuilder(color_prior, activation=self.activation,
                                                loss='mse', metrics=['mae'])
@@ -438,10 +444,10 @@ class GLCICBuilder(GraphBuilder):
 
         discriminator_builder = DiscriminatorBuilder(activation=self.activation,
                                                      loss='binary_crossentropy', metrics=['acc'])
-        discriminator_net = discriminator_builder.create(global_input_tensor, bbox_tensor)
-        if pretrained_discriminator is not None and os.path.isfile(pretrained_discriminator):
-            discriminator_net.load_weights(pretrained_discriminator)
-        discriminator_net = discriminator_builder.compile(discriminator_net)
+        discriminator_net = discriminator_builder(global_input_tensor, bbox_tensor,
+                                                  pretrained_local=pretrained_local,
+                                                  pretrained_global=pretrained_global,
+                                                  do_compile=True)
 
         discriminator_net.trainable = False
         discriminator_output_tensor = discriminator_net(
