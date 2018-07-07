@@ -15,7 +15,7 @@ from .envs import (
 )
 
 os.makedirs(evaluate_dir, exist_ok=True)
-+os.makedirs(ckpt_dir, exist_ok=True)
+os.makedirs(ckpt_dir, exist_ok=True)
 
 def training(x_train, x_test=None,
              eval_iters=50, ckpt_iters=100, max_iters=-1,
