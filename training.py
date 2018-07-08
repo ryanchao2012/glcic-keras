@@ -26,8 +26,8 @@ def evaluate(x_test, completion_net, w=32, h=32):
         for x in steps:
             p = x + ((128 - w) >> 1)
             q = y + ((128 - h) >> 1)
-            mask, box = np.asarray([maskgan._draw(x=x, y=y, w=w, h=h)])
-            eval_images = completion_net.predict([x_test, mask])
+            mask, _ = maskgan._draw(x=x, y=y, w=w, h=h)
+            eval_images = completion_net.predict([x_test, np.asarray([mask])])
             union_results[q:q+h, p:p+w, :] = eval_images[0, q:q+h, p:p+w, :]
 
     return union_results
