@@ -71,8 +71,9 @@ def training(x_train, x_test=None, init_iters=1,
                                  width_shift_range=0.2, height_shift_range=0.2)
     maskgan = RandomMaskGenerator(mask_size=(256, 256), box_size=(128, 128),
                                   max_size=(96, 96), min_size=(16, 16))
-    g_loss, d_loss = -1, -1
 
+    g_loss, d_loss, acc = -1, -1, -1
+    path = -1
     # Suppress trainable weights and collected trainable inconsistency warning
     with warnings.catch_warnings():
         warnings.simplefilter('ignore', category=UserWarning)
@@ -87,21 +88,22 @@ def training(x_train, x_test=None, init_iters=1,
             if dice <= tc_prior:
                 # ['loss', 'mean_absolute_error']
                 g_loss = completion_net.train_on_batch([images, masks], images)[0]
-
+                path = 'completion'
             elif dice <= td_prior:
                 # ['loss', 'acc']
                 d_loss_real = discriminator_net.train_on_batch([images, bboxes], real)[0]
                 d_loss_fake = discriminator_net.train_on_batch([completed_images, bboxes], fake)[0]
                 d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
+                path = 'discriminator'
 
             else:
                 # ['loss', 'glcic_completion_loss', 'glcic_discriminator_loss']
                 glcic_loss = glcic_net.train_on_batch([images, masks, bboxes], [images, real])
                 g_loss = glcic_loss[1]
                 d_loss = glcic_loss[2]
+                path = 'glcic'
 
-            print(f'Iter: {i:05}\tLosses: generator: {g_loss:.3E}, discriminator: {d_loss:.3E}', flush=True)
-
+            print(f'Iter: {i:05} Path: {path}\tLosses: generator: {g_loss:.3E}, discriminator: {d_loss:.3E}\tAccuracy: {acc:.2f}', flush=True)
             if i % eval_iters == 0 and (x_test is not None):
                 # eval_images = completion_net.predict(x_test)
                 eval_image = evaluate(x_test, completion_net)

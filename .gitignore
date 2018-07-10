@@ -8,3 +8,5 @@ __pycache__
 temp/
 test/
 *.summary
+*.jpg
+*.mp4
