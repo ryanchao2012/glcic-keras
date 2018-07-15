@@ -1,4 +1,3 @@
-import os
 import warnings
 import numpy as np
 import skimage.io as ski_io
@@ -8,8 +7,7 @@ from keras.models import Model
 from .models import _DisBuilder
 from .helpers import RandomMaskGenerator
 from .envs import (
-    PJ, data_dir, evaluate_dir, ckpt_dir,
-    discriminator_loss,
+    PJ, data_dir, ckpt_dir, discriminator_loss,
 )
 
 
@@ -41,7 +39,7 @@ def training(x_train, x_test=None, init_iters=1,
     with warnings.catch_warnings():
         warnings.simplefilter('ignore', category=UserWarning)
         for i, (real_images, (masks, _)) in enumerate(zip(datagan.flow(x_train, batch_size=batch_size),
-                                                               maskgan.flow(batch_size=batch_size)), init_iters):
+                                                          maskgan.flow(batch_size=batch_size)), init_iters):
             fake_images = real_images * (1.0 - masks) + masks * color_prior
             images = np.concatenate((fake_images, real_images), axis=0)
             labels = np.asarray([[lb] for lb in ([0] * fake_images.shape[0] + [1] * real_images.shape[0])])
