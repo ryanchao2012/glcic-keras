@@ -27,7 +27,11 @@ def training(x_train, x_test=None, init_iters=1,
                                         loss=discriminator_loss, debug=True,
                                         pretrained_file=pretrained_file)
 
-    dis = discriminator_builder(input_tensor)
+    dis = discriminator_builder(input_tensor,
+                                conv_n_filters=[64, 128, 256, 512, 512],
+                                conv_kernel_sizes=[5, 5, 5, 5, 5],
+                                conv_strides=[2, 2, 2, 2, 2],
+                                out_n_filter=1024)
     h = dis(input_tensor)
     output_tensor = Dense(1, activation='sigmoid')(h)
 
