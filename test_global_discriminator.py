@@ -43,7 +43,7 @@ def training(x_train, x_test=None, init_iters=1,
         for i, (real_images, (masks, bboxes)) in enumerate(zip(datagan.flow(x_train, batch_size=batch_size),
                                                                maskgan.flow(batch_size=batch_size)), init_iters):
             fake_images = real_images * (1.0 - masks) + masks * color_prior
-            images = np.asarray(fake_images + real_images)
+            images = np.concatenate((fake_images, real_images), axis=0)
             labels = np.asarray([[lb] for lb in ([0] * fake_images.shape[0] + [1] * real_images.shape[0])])
 
             # ['loss', 'acc']
