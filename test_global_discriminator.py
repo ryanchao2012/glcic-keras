@@ -12,15 +12,12 @@ from .envs import (
     discriminator_loss,
 )
 
-os.makedirs(evaluate_dir, exist_ok=True)
-os.makedirs(ckpt_dir, exist_ok=True)
-
 
 def training(x_train, x_test=None, init_iters=1,
              eval_iters=50, ckpt_iters=100, max_iters=-1,
-             pretrained_file=PJ(ckpt_dir, 'local_discriminator.h5')):
+             pretrained_file=PJ(ckpt_dir, 'global_discriminator.h5')):
 
-    input_tensor = Input(shape=(128, 128, 3), name='cropped_image')
+    input_tensor = Input(shape=(256, 256, 3), name='raw_image')
     color_prior = np.asarray([128, 128, 128], dtype=np.float) / 255.0
 
     discriminator_builder = _DisBuilder(activation='relu', metrics=['acc'],
@@ -43,22 +40,18 @@ def training(x_train, x_test=None, init_iters=1,
     # Suppress trainable weights and collected trainable inconsistency warning
     with warnings.catch_warnings():
         warnings.simplefilter('ignore', category=UserWarning)
-        for i, (images, (masks, bboxes)) in enumerate(zip(datagan.flow(x_train, batch_size=batch_size),
-                                                          maskgan.flow(batch_size=batch_size)), init_iters):
-            fake_images = images * (1.0 - masks) + masks * color_prior
-            cropped_fakes = [image[bbox[1]:bbox[1]+bbox[3], bbox[0]:bbox[0]+bbox[2]]
-                             for image, bbox in zip(fake_images, bboxes)]
-            cropped_reals = [image[bbox[1]:bbox[1]+bbox[3], bbox[0]:bbox[0]+bbox[2]]
-                             for image, bbox in zip(images, bboxes)]
-            cropped = np.asarray(cropped_fakes + cropped_reals)
-            labels = np.asarray([[lb] for lb in ([0] * fake_images.shape[0] + [1] * images.shape[0])])
+        for i, (real_images, (masks, bboxes)) in enumerate(zip(datagan.flow(x_train, batch_size=batch_size),
+                                                               maskgan.flow(batch_size=batch_size)), init_iters):
+            fake_images = real_images * (1.0 - masks) + masks * color_prior
+            images = np.asarray(fake_images + real_images)
+            labels = np.asarray([[lb] for lb in ([0] * fake_images.shape[0] + [1] * real_images.shape[0])])
 
             # ['loss', 'acc']
-            d_loss, acc = discriminator_net.train_on_batch(cropped, labels)
+            d_loss, acc = discriminator_net.train_on_batch(images, labels)
 
             print(f'Iter: {i:05},\t Loss: {d_loss:.3E}, Accuracy: {acc:2f}', flush=True)
             if i % ckpt_iters == 0:
-                discriminator_net.save(PJ(ckpt_dir, 'local_discriminator.h5'))
+                discriminator_net.save(PJ(ckpt_dir, 'global_discriminator.h5'))
 
             if max_iters > 0 and i >= max_iters:
                 break
