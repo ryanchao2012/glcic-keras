@@ -53,7 +53,7 @@ def training(x_train, x_test=None, init_iters=1,
             cropped = np.asarray(cropped_fakes + cropped_reals)
             labels = np.asarray([[lb] for lb in ([0] * fake_images.shape[0] + [1] * images.shape[0])])
 
-            # ['loss', 'acc']
+            # ('loss', 'acc')
             d_loss, acc = discriminator_net.train_on_batch(cropped, labels)
 
             print(f'Iter: {i:05},\t Loss: {d_loss:.3E}, Accuracy: {acc:2f}', flush=True)
