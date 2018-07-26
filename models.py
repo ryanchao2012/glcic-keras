@@ -461,7 +461,7 @@ class GLCICBuilder(GraphBuilder):
         if completion_net is None:
             completion_builder = CompletionBuilder(color_prior,
                                                    activation=self.activation,
-                                                   optimizer=self.optimizer,
+                                                   optimizer='adam',
                                                    loss='mse', metrics=['mae'],
                                                    pretrained_file=pretrained_completion,
                                                    debug=self.debug)
@@ -473,7 +473,7 @@ class GLCICBuilder(GraphBuilder):
         global_input_tensor = Input(shape=K.int_shape(completion_output_tensor)[1:], name='completed_image')
 
         discriminator_builder = DiscriminatorBuilder(activation=self.activation,
-                                                     optimizer=self.optimizer,
+                                                     optimizer='sgd',
                                                      loss='binary_crossentropy', metrics=['acc'],
                                                      debug=self.debug)
         discriminator_net = discriminator_builder(global_input_tensor, bbox_tensor,
