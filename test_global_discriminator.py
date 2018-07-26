@@ -8,16 +8,17 @@ from keras.models import Model
 from .models import _DisBuilder
 from .helpers import RandomMaskGenerator
 from .envs import (
-    PJ, data_dir, ckpt_dir,
+    PJ, data_dir, ckpt_dir, evaluate_dir,
     discriminator_loss,
     pretrained_global
 )
 
 os.makedirs(ckpt_dir, exist_ok=True)
+os.makedirs(evaluate_dir, exist_ok=True)
 
 
 def training(x_train, x_test=None, init_iters=1,
-             eval_iters=50, ckpt_iters=100, max_iters=-1,
+             eval_iters=-1, ckpt_iters=-1, max_iters=-1,
              pretrained_file=pretrained_global):
 
     input_tensor = Input(shape=(256, 256, 3), name='raw_image')
@@ -27,15 +28,17 @@ def training(x_train, x_test=None, init_iters=1,
                                         loss=discriminator_loss, debug=True,
                                         pretrained_file=pretrained_file)
 
-    # This (original) config is too deep to converge
-    # global_net = discriminator_builder(input_tensor,
-    #                                    conv_n_filters=[64, 128, 256, 512, 512, 512],
-    #                                    conv_kernel_sizes=[5, 5, 5, 5, 5, 5],
-    #                                    conv_strides=[2, 2, 2, 2, 2, 2],
-    #                                    out_n_filter=1024)
+    # Default config
+    global_net = discriminator_builder(input_tensor,
+                                       conv_n_filters=[64, 128, 256, 512, 512, 512],
+                                       conv_kernel_sizes=[5, 5, 5, 5, 5, 5],
+                                       conv_strides=[2, 2, 2, 2, 2, 2],
+                                       out_n_filter=1024,
+                                       tag='glcic_global_discriminator')
 
     # Test for shallow net
-    global_net = discriminator_builder(input_tensor)
+    # global_net = discriminator_builder(input_tensor, tag='glcic_global_discriminator')
+
     h = global_net(input_tensor)
     output_tensor = Dense(1, activation='sigmoid')(h)
 
@@ -61,7 +64,17 @@ def training(x_train, x_test=None, init_iters=1,
             d_loss, acc = discriminator_net.train_on_batch(images, labels)
 
             print(f'Iter: {i:05},\t Loss: {d_loss:.3E}, Accuracy: {acc:2f}', flush=True)
-            if i % ckpt_iters == 0:
+
+            if eval_iters > 0 and i % eval_iters == 0:
+                eval_image = np.concatenate(
+                    (fake_images[0, ...],
+                     np.repeat(masks[0, ...], 3, axis=2),
+                     real_images[0, ...]),
+                    axis=1
+                )
+                ski_io.imsave(PJ(evaluate_dir, f'eval_{i:05}.jpg'), eval_image, quality=100)
+
+            if ckpt_iters > 0 and i % ckpt_iters == 0:
                 print('Saving global_net.')
                 global_net.save(pretrained_global)
 

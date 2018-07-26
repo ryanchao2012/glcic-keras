@@ -29,7 +29,7 @@ class GraphBuilder:
     intent = 4
 
     def __init__(self, activation='sigmoid', dropout=0.1,
-                 optimizer='adam', loss=None, metrics=None,
+                 optimizer='sgd', loss=None, metrics=None,
                  pretrained_file=None, debug=False):
         self.activation = activation
         self.dropout = dropout
@@ -42,6 +42,7 @@ class GraphBuilder:
     def __call__(self, *create_args, do_compile=False, **create_kwargs):
         model = self.create(*create_args, **create_kwargs)
         if self.pretrained_file is not None and os.path.isfile(self.pretrained_file):
+            print(f'Loading pretrained model for `{self.__tag__}`')
             model.load_weights(self.pretrained_file)
         if do_compile:
             return self.compile(model)
