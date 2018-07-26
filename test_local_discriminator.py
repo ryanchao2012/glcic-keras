@@ -8,17 +8,17 @@ from keras.models import Model
 from .models import _DisBuilder
 from .helpers import RandomMaskGenerator
 from .envs import (
-    PJ, data_dir, evaluate_dir, ckpt_dir,
+    PJ, data_dir, ckpt_dir,
     discriminator_loss,
+    pretrained_local
 )
 
-os.makedirs(evaluate_dir, exist_ok=True)
 os.makedirs(ckpt_dir, exist_ok=True)
 
 
 def training(x_train, x_test=None, init_iters=1,
              eval_iters=50, ckpt_iters=100, max_iters=-1,
-             pretrained_file=PJ(ckpt_dir, 'local_discriminator.h5')):
+             pretrained_file=pretrained_local):
 
     input_tensor = Input(shape=(128, 128, 3), name='cropped_image')
     color_prior = np.asarray([128, 128, 128], dtype=np.float) / 255.0
@@ -27,17 +27,18 @@ def training(x_train, x_test=None, init_iters=1,
                                         loss=discriminator_loss, debug=True,
                                         pretrained_file=pretrained_file)
 
-    dis = discriminator_builder(input_tensor,
-                                conv_n_filters=[64, 128, 256, 512, 512],
-                                conv_kernel_sizes=[5, 5, 5, 5, 5],
-                                conv_strides=[2, 2, 2, 2, 2],
-                                out_n_filter=1024)
-    h = dis(input_tensor)
+    # Align to original config (see models.py)
+    local_net = discriminator_builder(input_tensor,
+                                      conv_n_filters=[64, 128, 256, 512, 512],
+                                      conv_kernel_sizes=[5, 5, 5, 5, 5],
+                                      conv_strides=[2, 2, 2, 2, 2],
+                                      out_n_filter=1024)
+    h = local_net(input_tensor)
     output_tensor = Dense(1, activation='sigmoid')(h)
 
     discriminator_net = discriminator_builder.compile(Model(input_tensor, output_tensor))
 
-    batch_size = x_train.shape[0]
+    batch_size = min(x_train.shape[0], 32)
     datagan = ImageDataGenerator(rotation_range=20, horizontal_flip=True,
                                  fill_mode='reflect',
                                  width_shift_range=0.2, height_shift_range=0.2)
@@ -61,8 +62,9 @@ def training(x_train, x_test=None, init_iters=1,
             d_loss, acc = discriminator_net.train_on_batch(cropped, labels)
 
             print(f'Iter: {i:05},\t Loss: {d_loss:.3E}, Accuracy: {acc:2f}', flush=True)
-            # if i % ckpt_iters == 0:
-            #     discriminator_net.save(PJ(ckpt_dir, 'local_discriminator.h5'))
+            if i % ckpt_iters == 0:
+                print('Saving local_net...')
+                local_net.save(pretrained_local)
 
             if max_iters > 0 and i >= max_iters:
                 break
@@ -72,5 +74,5 @@ if __name__ == '__main__':
     # eval_mask = list(RandomMaskGenerator().flow(total_size=1))[0][0]
     input_image = ski_io.imread(PJ(data_dir, 'food.jpg')).astype(np.float) / 255.0
     x_train = np.asarray([input_image])
-    training(x_train, x_test=x_train, max_iters=200)
+    training(x_train, x_test=x_train, max_iters=199, ckpt_iters=200)
     print('Accuracy should converge to 1.')

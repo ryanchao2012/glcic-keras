@@ -36,7 +36,7 @@ def evaluate(x_test, completion_net, w=32, h=32):
 def training(x_train, x_test=None, init_iters=1,
              eval_iters=50, ckpt_iters=100, max_iters=-1,
              tc_prior=0.3, td_prior=0.6,
-             pretrained_generator=PJ(ckpt_dir, 'generator.h5'),
+             pretrained_completion=PJ(ckpt_dir, 'completion.h5'),
              pretrained_local=PJ(ckpt_dir, 'local_discriminator.h5'),
              pretrained_global=PJ(ckpt_dir, 'global_discriminator.h5')):
     input_tensor = Input(shape=(256, 256, 3), name='raw_image')
@@ -45,14 +45,14 @@ def training(x_train, x_test=None, init_iters=1,
     color_prior = np.asarray([128, 128, 128], dtype=np.float) / 255.0
     alpha = glcic_alpha
 
-    d = tc_prior + td_prior
+    d = tc_prior + td_prior + 0.01
     tc_prior, td_prior = tc_prior/d, td_prior/d
 
     glcic = GLCICBuilder(activation='relu',
                          loss=[generator_loss, discriminator_loss])
     glcic_net = glcic.create(input_tensor, mask_tensor,
                              bbox_tensor, color_prior=color_prior,
-                             pretrained_generator=pretrained_generator,
+                             pretrained_completion=pretrained_completion,
                              pretrained_local=pretrained_local,
                              pretrained_global=pretrained_global)
 
@@ -103,14 +103,14 @@ def training(x_train, x_test=None, init_iters=1,
                 d_loss = glcic_loss[2]
                 path = 'glcic'
 
-            print(f'Iter: {i:05} Path: {path}\tLosses: generator: {g_loss:.3E}, discriminator: {d_loss:.3E}\tAccuracy: {acc:.2f}', flush=True)
+            print(f'Iter: {i:05} Path: {path}\tLosses: completion: {g_loss:.3E}, discriminator: {d_loss:.3E}\tAccuracy: {acc:.2f}', flush=True)
             if i % eval_iters == 0 and (x_test is not None):
                 # eval_images = completion_net.predict(x_test)
                 eval_image = evaluate(x_test, completion_net)
 
                 ski_io.imsave(PJ(evaluate_dir, f'eval_{i:05}.jpg'), eval_image, quality=100)
             if i % ckpt_iters == 0:
-                completion_net.save(PJ(ckpt_dir, 'generator.h5'))
+                completion_net.save(PJ(ckpt_dir, 'completion.h5'))
                 local_discriminator.save(PJ(ckpt_dir, 'local_discriminator.h5'))
                 global_discriminator.save(PJ(ckpt_dir, 'global_discriminator.h5'))
 

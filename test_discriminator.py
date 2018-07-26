@@ -3,7 +3,7 @@ import numpy as np
 import skimage.io as ski_io
 from keras.layers import Input
 from keras.preprocessing.image import ImageDataGenerator
-from .models import DiscriminatorBuilder
+from .models import DiscriminatorBuilder, _DisBuilder
 from .helpers import RandomMaskGenerator
 from .envs import (
     PJ, data_dir, ckpt_dir, discriminator_loss,
@@ -16,16 +16,36 @@ def training(x_train, x_test=None, init_iters=1,
              pretrained_global=PJ(ckpt_dir, 'global_discriminator.h5')):
 
     input_tensor = Input(shape=(256, 256, 3), name='raw_image')
+    local_tensor = Input(shape=(128, 128, 3), name='cropped_image')
+
     bbox_tensor = Input(shape=(4,), dtype='int32', name='bounding_box')
     color_prior = np.asarray([128, 128, 128], dtype=np.float) / 255.0
 
-    discriminator_builder = DiscriminatorBuilder(activation='relu', loss=discriminator_loss, metrics=['acc'])
+    global_builder = _DisBuilder(activation='relu', metrics=['acc'],
+                                 loss=discriminator_loss, debug=True,
+                                 pretrained_file=pretrained_global)
+    local_builder = _DisBuilder(activation='relu', metrics=['acc'],
+                                loss=discriminator_loss, debug=True,
+                                pretrained_file=pretrained_local)
+
+    local_net = local_builder(local_tensor,
+                              conv_n_filters=[64, 128, 256, 512, 512],
+                              conv_kernel_sizes=[5, 5, 5, 5, 5],
+                              conv_strides=[2, 2, 2, 2, 2],
+                              out_n_filter=1024,
+                              do_compile=True)
+
+    global_net = global_builder(input_tensor, do_compile=True)
+
+    discriminator_builder = DiscriminatorBuilder(activation='relu',
+                                                 metrics=['acc'],
+                                                 loss=discriminator_loss)
+
     discriminator_net = discriminator_builder(input_tensor, bbox_tensor,
-                                              pretrained_local=pretrained_local,
-                                              pretrained_global=pretrained_global,
+                                              global_net=global_net, local_net=local_net,
                                               do_compile=True)
 
-    batch_size = x_train.shape[0]
+    batch_size = min(x_train.shape[0], 32)
     datagan = ImageDataGenerator(rotation_range=20, horizontal_flip=True,
                                  fill_mode='reflect',
                                  width_shift_range=0.2, height_shift_range=0.2)

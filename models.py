@@ -298,6 +298,8 @@ class CompletionBuilder(GraphBuilder):
             if self.debug:
                 debug_graphs.append(Graph(input_tensor, output_tensor, name=f'debug_{layer.name}'))
 
+        setattr(self, f'debug_{self.__tag__}', debug_graphs)
+
         # completion stage
         completion_tensor = Lambda(
             lambda x: x[0] * x[2] + x[1] * (1 - x[2]),
@@ -383,26 +385,24 @@ class DiscriminatorBuilder(_DisBuilder):
     def cropping(self, image, bbox):
         return tf.image.crop_to_bounding_box(image, bbox[1], bbox[0], bbox[3], bbox[2])
 
-    def create(self, global_input_tensor, bbox_tensor, local_shape=(128, 128, 3),
+    def create(self, global_input_tensor, bbox_tensor,
+               local_shape=(128, 128, 3),
+               local_net=None, global_net=None,
                pretrained_local=None, pretrained_global=None):
 
-        global_builder = _DisBuilder(activation=self.activation,
-                                     loss='binary_crossentropy', metrics=['acc'],
-                                     pretrained_file=pretrained_global, debug=self.debug)
-
-        local_builder = _DisBuilder(activation=self.activation,
-                                    loss='binary_crossentropy', metrics=['acc'],
-                                    pretrained_file=pretrained_local, debug=self.debug)
-
-        global_net = global_builder(
-            global_input_tensor,
-            conv_n_filters=[64, 128, 256, 512, 512, 512],
-            conv_kernel_sizes=[5, 5, 5, 5, 5, 5],
-            conv_strides=[2, 2, 2, 2, 2, 2],
-            out_n_filter=1024,
-            tag='glcic_global_discriminator',
-            do_compile=True
-        )
+        if global_net is None:
+            global_builder = _DisBuilder(activation=self.activation,
+                                         loss='binary_crossentropy',
+                                         pretrained_file=pretrained_global,
+                                         metrics=['acc'], debug=self.debug)
+            global_net = global_builder(
+                global_input_tensor,
+                conv_n_filters=[64, 128, 256, 512, 512, 512],
+                conv_kernel_sizes=[5, 5, 5, 5, 5, 5],
+                conv_strides=[2, 2, 2, 2, 2, 2],
+                out_n_filter=1024,
+                tag='glcic_global_discriminator',
+            )
 
         cropping_layer = Lambda(
             lambda x: K.map_fn(
@@ -416,15 +416,20 @@ class DiscriminatorBuilder(_DisBuilder):
 
         cropped_tensor = cropping_layer([global_input_tensor, bbox_tensor])
         local_input_tensor = Input(shape=K.int_shape(cropped_tensor)[1:], name='local_roi')
-        local_net = local_builder(
-            local_input_tensor,
-            conv_n_filters=[64, 128, 256, 512, 512],
-            conv_kernel_sizes=[5, 5, 5, 5, 5],
-            conv_strides=[2, 2, 2, 2, 2],
-            out_n_filter=1024,
-            tag='glcic_local_discriminator',
-            do_compile=True
-        )
+
+        if local_net is None:
+            local_builder = _DisBuilder(activation=self.activation,
+                                        loss='binary_crossentropy',
+                                        pretrained_file=pretrained_local,
+                                        metrics=['acc'], debug=self.debug)
+            local_net = local_builder(
+                local_input_tensor,
+                conv_n_filters=[64, 128, 256, 512, 512],
+                conv_kernel_sizes=[5, 5, 5, 5, 5],
+                conv_strides=[2, 2, 2, 2, 2],
+                out_n_filter=1024,
+                tag='glcic_local_discriminator',
+            )
 
         global_output_tensor = global_net(global_input_tensor)
         local_output_tensor = local_net(cropped_tensor)
@@ -446,17 +451,21 @@ class GLCICBuilder(GraphBuilder):
     __tag__ = 'glcic'
 
     def create(self, input_tensor, mask_tensor, bbox_tensor,
+               completion_net=None,
+               pretrained_completion=None,
+               global_net=None, local_net=None,
                pretrained_local=None, pretrained_global=None,
-               pretrained_generator=None, color_prior=None):
+               color_prior=None):
 
-        completion_builder = CompletionBuilder(color_prior,
-                                               activation=self.activation,
-                                               optimizer=self.optimizer,
-                                               loss='mse', metrics=['mae'],
-                                               pretrained_file=pretrained_generator,
-                                               debug=self.debug)
+        if completion_net is None:
+            completion_builder = CompletionBuilder(color_prior,
+                                                   activation=self.activation,
+                                                   optimizer=self.optimizer,
+                                                   loss='mse', metrics=['mae'],
+                                                   pretrained_file=pretrained_completion,
+                                                   debug=self.debug)
 
-        completion_net = completion_builder(input_tensor, mask_tensor, do_compile=True)
+            completion_net = completion_builder(input_tensor, mask_tensor, do_compile=True)
 
         completion_output_tensor = completion_net([input_tensor, mask_tensor])
 
@@ -466,13 +475,13 @@ class GLCICBuilder(GraphBuilder):
                                                      optimizer=self.optimizer,
                                                      loss='binary_crossentropy', metrics=['acc'],
                                                      debug=self.debug)
-
         discriminator_net = discriminator_builder(global_input_tensor, bbox_tensor,
+                                                  global_net=global_net, local_net=local_net,
                                                   pretrained_local=pretrained_local,
                                                   pretrained_global=pretrained_global,
                                                   do_compile=True)
-
         discriminator_net.trainable = False
+
         discriminator_output_tensor = discriminator_net(
             [completion_output_tensor, bbox_tensor]
         )
@@ -506,10 +515,10 @@ if __name__ == '__main__':
         warnings.simplefilter('ignore', category=UserWarning)
         glcic.nested_summary(glcic_net)
 
-    completion_net = glcic.getnet('glcic_completion')
-    discriminator_net = glcic.getnet('glcic_discriminator')
-    glcic_local_discriminator_net = glcic.getnet('glcic_local_discriminator')
-    glcic_global_discriminator_net = glcic.getnet('glcic_global_discriminator')
+    completion_net = glcic.glcic_completion
+    discriminator_net = glcic.glcic_discriminator
+    glcic_local_discriminator_net = glcic.glcic_local_discriminator
+    glcic_global_discriminator_net = glcic.glcic_global_discriminator
 
     graph_dir = 'graphs'
     os.makedirs(PJ(this_dir, graph_dir), exist_ok=True)
