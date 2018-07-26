@@ -113,8 +113,11 @@ def training(x_train, x_test=None, init_iters=1,
 
                 ski_io.imsave(PJ(evaluate_dir, f'eval_{i:06}.jpg'), eval_image, quality=100)
             if ckpt_iters > 0 and i % ckpt_iters == 0:
+                print('Saving completion_net...')
                 completion_net.save(PJ(ckpt_dir, 'completion.h5'))
+                print('Saving local_net...')
                 local_discriminator.save(PJ(ckpt_dir, 'local_discriminator.h5'))
+                print('Saving global_net...')
                 global_discriminator.save(PJ(ckpt_dir, 'global_discriminator.h5'))
 
             if max_iters > 0 and i > max_iters:
