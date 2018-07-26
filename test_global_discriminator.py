@@ -85,5 +85,5 @@ def training(x_train, x_test=None, init_iters=1,
 if __name__ == '__main__':
     input_image = ski_io.imread(PJ(data_dir, 'food.jpg')).astype(np.float) / 255.0
     x_train = np.asarray([input_image])
-    training(x_train, x_test=x_train, max_iters=499, ckpt_iters=500)
+    training(x_train, x_test=x_train, max_iters=200)
     print('Accuracy should converge to 1.')

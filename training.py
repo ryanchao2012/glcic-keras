@@ -5,7 +5,6 @@ import numpy as np
 import skimage.io as ski_io
 from keras.layers import Input
 from keras.preprocessing.image import ImageDataGenerator
-import keras.backend as K
 from .models import GLCICBuilder
 from .helpers import RandomMaskGenerator, FixMaskGenerator
 from .envs import (
@@ -77,39 +76,43 @@ def training(x_train, x_test=None, init_iters=1,
     # Suppress trainable weights and collected trainable inconsistency warning
     with warnings.catch_warnings():
         warnings.simplefilter('ignore', category=UserWarning)
-        for i, (images, (masks, bboxes)) in enumerate(zip(datagan.flow(x_train, batch_size=batch_size),
-                                                          maskgan.flow(batch_size=batch_size)), init_iters):
-            completed_images = completion_net.predict([images, masks])
+        for i, (real_images, (masks, bboxes)) in enumerate(zip(datagan.flow(x_train, batch_size=batch_size),
+                                                               maskgan.flow(batch_size=batch_size)), init_iters):
             real = np.ones((batch_size, 1))
             fake = np.zeros((batch_size, 1))
+
+            fake_images = real_images * (1.0 - masks) + masks * color_prior
+            images = np.concatenate((fake_images, real_images), axis=0)
+            labels = np.concatenate((fake, real), axis=0)
+            concat_bboxes = np.concatenate((bboxes, bboxes), axis=0)
 
             dice = random.random()
 
             if dice <= tc_prior:
                 # ['loss', 'mean_absolute_error']
-                g_loss = completion_net.train_on_batch([images, masks], images)[0]
+                g_loss = completion_net.train_on_batch([real_images, masks], real_images)[0]
                 path = 'completion'
+
             elif dice <= td_prior:
                 # ['loss', 'acc']
-                d_loss_real = discriminator_net.train_on_batch([images, bboxes], real)[0]
-                d_loss_fake = discriminator_net.train_on_batch([completed_images, bboxes], fake)[0]
-                d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
+                d_loss, acc = discriminator_net.train_on_batch([images, concat_bboxes], labels)
                 path = 'discriminator'
 
             else:
                 # ['loss', 'glcic_completion_loss', 'glcic_discriminator_loss']
-                glcic_loss = glcic_net.train_on_batch([images, masks, bboxes], [images, real])
+                glcic_loss = glcic_net.train_on_batch([real_images, masks, bboxes], [real_images, real])
                 g_loss = glcic_loss[1]
                 d_loss = glcic_loss[2]
                 path = 'glcic'
 
-            print(f'Iter: {i:05} Path: {path}\tLosses: completion: {g_loss:.3E}, discriminator: {d_loss:.3E}\tAccuracy: {acc:.2f}', flush=True)
-            if i % eval_iters == 0 and (x_test is not None):
-                # eval_images = completion_net.predict(x_test)
+            print(f'Iter: {i:05} Path: {path}\
+                    \tLosses: completion: {g_loss:.3E}, discriminator: {d_loss:.3E}\
+                    \tAccuracy: {acc:.2f}', flush=True)
+            if (eval_iters > 0) and (i % eval_iters == 0) and (x_test is not None):
                 eval_image = evaluate(x_test, completion_net)
 
-                ski_io.imsave(PJ(evaluate_dir, f'eval_{i:05}.jpg'), eval_image, quality=100)
-            if i % ckpt_iters == 0:
+                ski_io.imsave(PJ(evaluate_dir, f'eval_{i:06}.jpg'), eval_image, quality=100)
+            if ckpt_iters > 0 and i % ckpt_iters == 0:
                 completion_net.save(PJ(ckpt_dir, 'completion.h5'))
                 local_discriminator.save(PJ(ckpt_dir, 'local_discriminator.h5'))
                 global_discriminator.save(PJ(ckpt_dir, 'global_discriminator.h5'))
@@ -123,4 +126,4 @@ if __name__ == '__main__':
     input_image = ski_io.imread(PJ(data_dir, 'food.jpg')).astype(np.float) / 255.0
     x_train = np.asarray([input_image])
     # x_test = [x_train, eval_mask]
-    training(x_train, x_test=x_train)
+    training(x_train, x_test=x_train, tc_prior=1.0, td_prior=0.0, max_iters=10000)

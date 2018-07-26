@@ -100,4 +100,5 @@ if __name__ == '__main__':
     # eval_mask = list(RandomMaskGenerator().flow(total_size=1))[0][0]
     input_image = ski_io.imread(PJ(data_dir, 'food.jpg')).astype(np.float) / 255.0
     x_train = np.asarray([input_image])
-    training(x_train, x_test=x_train, max_iters=1000)
+    training(x_train, x_test=x_train, max_iters=200)
+    print('Accuracy should converge to 1.')
