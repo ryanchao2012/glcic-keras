@@ -394,6 +394,7 @@ class DiscriminatorBuilder(_DisBuilder):
         if global_net is None:
             global_builder = _DisBuilder(activation=self.activation,
                                          loss='binary_crossentropy',
+                                         optimizer=self.optimizer,
                                          pretrained_file=pretrained_global,
                                          metrics=['acc'], debug=self.debug)
             global_net = global_builder(
@@ -421,6 +422,7 @@ class DiscriminatorBuilder(_DisBuilder):
         if local_net is None:
             local_builder = _DisBuilder(activation=self.activation,
                                         loss='binary_crossentropy',
+                                        optimizer=self.optimizer,
                                         pretrained_file=pretrained_local,
                                         metrics=['acc'], debug=self.debug)
             local_net = local_builder(
@@ -461,7 +463,7 @@ class GLCICBuilder(GraphBuilder):
         if completion_net is None:
             completion_builder = CompletionBuilder(color_prior,
                                                    activation=self.activation,
-                                                   optimizer='adam',
+                                                   optimizer=self.optimizer,
                                                    loss='mse', metrics=['mae'],
                                                    pretrained_file=pretrained_completion,
                                                    debug=self.debug)

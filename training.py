@@ -44,10 +44,10 @@ def training(x_train, x_test=None, init_iters=1,
     color_prior = np.asarray([128, 128, 128], dtype=np.float) / 255.0
     alpha = glcic_alpha
 
-    d = tc_prior + td_prior + 0.01
-    tc_prior, td_prior = tc_prior/d, td_prior/d
+    d = float(tc_prior + td_prior)
+    tc_prior, td_prior = (tc_prior/d, td_prior/d) if d > 0 else (0.0, 0.0)
 
-    glcic = GLCICBuilder(activation='relu',
+    glcic = GLCICBuilder(activation='relu', optimizer='adam',
                          loss=[generator_loss, discriminator_loss])
     glcic_net = glcic.create(input_tensor, mask_tensor,
                              bbox_tensor, color_prior=color_prior,
